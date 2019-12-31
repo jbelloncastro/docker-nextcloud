@@ -1,24 +1,90 @@
 ---
 version: '3'
-# This instance is using SQLite3 as database backend.
-# Please consider using a proper database like MariaDB or PostgreSQL
-# if you want to use this productive.
+
+networks:
+  nextcloud_network:
+    external: false
 
 services:
   nextcloud:
     image: wonderfall/nextcloud
-    build:
-      context: .
-      dockerfile: Dockerfile.15.0
+    depends_on:
+      - nextcloud-db           # If using MySQL
+        #- solr                   # If using Nextant (search files)
+        #- redis                  # If using Redis
+    ports:
+      - 8888:8888
     environment:
       - UID=1000
       - GID=1000
-      - ADMIN_USER=mrrobot
-      - ADMIN_PASSWORD=supercomplicatedpassword
-      - DB_TYPE=sqlite
+      - UPLOAD_MAX_SIZE=10G
+      - APC_SHM_SIZE=128M
+      - OPCACHE_MEM_SIZE=128
+      - CRON_PERIOD=15m
+      - TZ=Europe/London
+      - ADMIN_USER=admin            # Don't set to configure through browser
+      - ADMIN_PASSWORD=admin        # Don't set to configure through browser
+      - DOMAIN=localhost
+      - DB_TYPE=mysql
+      - DB_NAME=nextcloud
+      - DB_USER=nextcloud
+      - DB_PASSWORD=supersecretpassword
+      - DB_HOST=nextcloud-db
     volumes:
-      - ./data:/data
-      - ./config:/config
-      - ./apps:/apps2
-    ports:
-      - 8888:8888
+      - /tmp/docker/nextcloud/data:/data:Z
+      - /tmp/docker/nextcloud/config:/config:Z
+      - /tmp/docker/nextcloud/apps:/apps2:Z
+      - /tmp/docker/nextcloud/themes:/nextcloud/themes:Z
+    networks:
+      - nextcloud_network
+
+  # If using PostgreSQL
+  nextcloud-db:
+    image: postgres:9-alpine
+    volumes:
+      - /tmp/docker/nextcloud/db:/var/lib/postgresql:Z
+      - postgresql-initdb.d:/docker-entrypoint-initdb.d:Z # initializations script
+    environment:
+      - POSTGRES_USER=postgres # this is the superuser's name
+      - POSTGRES_PASSWORD=supersecretpassword
+      - POSTGRES_DB=postgres # default database (not nextcloud's)
+      - DB_USER=nextcloud
+      - DB_NAME=nextcloud
+      - DB_PASSWORD=supersecretpassword
+    networks:
+      - nextcloud_network
+
+  # If using MySQL
+  # nextcloud-db:
+  #   image: mariadb:10
+  #   volumes:
+  #     - /tmp/docker/nextcloud/db:/var/lib/mysql:Z
+  #   environment:
+  #     - MYSQL_ROOT_PASSWORD=supersecretpassword
+  #     - MYSQL_DATABASE=nextcloud
+  #     - MYSQL_USER=nextcloud
+  #     - MYSQL_PASSWORD=supersecretpassword
+  #   networks:
+  #     - nextcloud_network
+
+  # If using Nextant
+  # solr:
+  #   image: solr:6-alpine
+  #   container_name: solr
+  #   volumes:
+  #     - /tmp/docker/nextcloud/solr:/opt/solr/server/solr/mycores:Z
+  #   entrypoint:
+  #     - docker-entrypoint.sh
+  #     - solr-precreate
+  #     - nextant
+  #   networks:
+  #     - nextcloud_network
+  #
+  # If using Redis
+  # redis:
+  #   image: redis:alpine
+  #   container_name: redis
+  #   volumes:
+  #     - /tmp/docker/nextcloud/redis:/data:Z
+  #   networks:
+  #     - nextcloud_network

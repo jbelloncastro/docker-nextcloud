@@ -1,4 +1,35 @@
-FROM wonderfall/nginx-php:7.2
+FROM php:7-fpm-alpine
+
+RUN apk -U upgrade
+RUN apk add -t build-dependencies \
+               autoconf \
+               automake \
+               build-base \
+               libtool \
+               pcre-dev \
+               samba-dev \
+               tar
+
+ENV ext smbclient
+RUN mkdir -p /usr/src/php/ext/$ext \
+ && curl -fsSL https://pecl.php.net/get/$ext | tar xvz -C /usr/src/php/ext/$ext --strip 1 \
+ && docker-php-ext-install $ext
+
+ENV ext apcu
+RUN mkdir -p /usr/src/php/ext/$ext \
+ && curl -fsSL https://pecl.php.net/get/$ext | tar xvz -C /usr/src/php/ext/$ext --strip 1 \
+ && docker-php-ext-install $ext
+
+ENV ext redis
+RUN mkdir -p /usr/src/php/ext/$ext \
+ && curl -fsSL https://pecl.php.net/get/$ext | tar xvz -C /usr/src/php/ext/$ext --strip 1 \
+ && docker-php-ext-install $ext
+
+FROM php:7-fpm-alpine
+
+RUN apk -U upgrade
+RUN apk add gnupg \
+            tar
 
 ARG NEXTCLOUD_VERSION=16.0.1
 ARG GPG_nextcloud="2880 6A87 8AE4 23A2 8372  792E D758 99B9 A724 937A"
@@ -14,27 +45,15 @@ ENV UID=991 GID=991 \
     DB_TYPE=sqlite3 \
     DOMAIN=localhost
 
-RUN apk -U upgrade \
- && apk add -t build-dependencies \
-    gnupg \
-    tar \
-    build-base \
-    autoconf \
-    automake \
-    pcre-dev \
-    libtool \
-    samba-dev \
- && apk add \
-    libressl \
-    ca-certificates \
-    libsmbclient \
-    tzdata \
- && pecl install \
-    smbclient \
-    apcu \
-    redis \
- && echo "extension=smbclient.so" > /php/conf.d/smbclient.ini \
- && echo "extension=redis.so" > /php/conf.d/redis.ini \
+RUN apk add libressl \
+            ca-certificates \
+            libsmbclient \
+            tzdata
+
+COPY --from=0 /usr/local/lib/php/extensions /usr/local/lib/php/extensions
+
+RUN echo "extension=smbclient.so" > /usr/local/etc/php/conf.d/smbclient.ini \
+ && echo "extension=redis.so" > /usr/local/etc/php/conf.d/redis.ini \
  && mkdir /nextcloud \
  && cd /tmp \
  && NEXTCLOUD_TARBALL="nextcloud-${NEXTCLOUD_VERSION}.tar.bz2" \
@@ -53,7 +72,6 @@ RUN apk -U upgrade \
  && echo "All seems good, now unpacking ${NEXTCLOUD_TARBALL}..." \
  && tar xjf ${NEXTCLOUD_TARBALL} --strip 1 -C /nextcloud \
  && update-ca-certificates \
- && apk del build-dependencies \
  && rm -rf /var/cache/apk/* /tmp/* /root/.gnupg
 
 COPY rootfs /
